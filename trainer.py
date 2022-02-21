@@ -112,6 +112,17 @@ npos = len(pcldf)
 
 training_set1 = pd.concat([pcldf, nopcldf[:npos * 2]])
 
+# %%
+# Split the training data into train and validation sets
+n_examples = training_set1.shape[0]
+proportion_for_validation = 0 # between 0 and 1
+n_validation = int(n_examples * proportion_for_validation)
+
+if proportion_for_validation > 0:
+    indices = np.random.permutation(n_examples)
+    validation_subset = training_set1[['text', 'label']].iloc[indices[:n_validation]]
+    training_subset = training_set1[['text', 'label']].iloc[indices[n_validation:]]
+
 # %% md
 # Training Code
 
@@ -125,13 +136,30 @@ task1_model = ClassificationModel("distilbert",
                                   args=task1_model_args,
                                   num_labels=2,
                                   use_cuda=cuda_available)
+
 # train model
-task1_model.train_model(training_set1[['text', 'label']])
+if proportion_for_validation == 0:
+    task1_model.train_model(training_set1[['text', 'label']])
+else:
+    task1_model.train_model(train_df=training_subset, eval_df=validation_subset)
+
 # run predictions
 preds_task1, _ = task1_model.predict(tedf1.text.tolist())
 
 # %%
 print(Counter(preds_task1))
+
+# Evaluate predictions
+true_positive = ((preds_task1 == 1) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 1).sum()
+false_positive = ((preds_task1 == 1) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 1).sum()
+true_negative = ((preds_task1 == 0) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 0).sum()
+false_negative = ((preds_task1 == 0) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 0).sum()
+precision = true_positive / (true_positive + false_positive)
+recall = true_positive / (true_positive + true_negative)
+accuracy = (tedf1.label == preds_task1).mean()
+f1_score = 2 * precision * recall / (precision + recall)
+print("Proportion of correctly predicted labels:", accuracy)
+print("F1-score:", f1_score)
 
 # %%
 labels2file([[k] for k in preds_task1], 'task1.txt')
