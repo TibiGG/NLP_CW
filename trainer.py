@@ -105,6 +105,7 @@ tedf1 = pd.DataFrame(rows)
 # RoBERTa Baseline for Task 1
 
 # %%
+# TODO: replace current logic with data augmentation
 # downsample negative instances
 pcldf = trdf1[trdf1.label == 1]
 nopcldf = trdf1[trdf1.label == 0]
@@ -120,11 +121,13 @@ task1_model_args = ClassificationArgs(num_train_epochs=1,
                                       no_save=True,
                                       no_cache=True,
                                       overwrite_output_dir=True)
+print(task1_model_args)
 task1_model = ClassificationModel("distilbert",
-                                  'distilbert-base-uncased',
+                                  "distilbert-base-uncased",
                                   args=task1_model_args,
                                   num_labels=2,
                                   use_cuda=cuda_available)
+# %%
 # train model
 task1_model.train_model(training_set1[['text', 'label']])
 # run predictions
