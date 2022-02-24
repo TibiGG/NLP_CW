@@ -11,6 +11,7 @@ For DoC GPU, ensure you install anaconda in `/vol/bitbucket/<your_username>`
 ```bash
 conda create -n nlp python=3.8
 conda activate nlp
+conda install -c pytorch pytorch 
 conda install cudatoolkit=11.0
 conda install pandas tqdm
 ```
