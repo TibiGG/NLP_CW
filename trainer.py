@@ -134,6 +134,19 @@ preds_task1, _ = task1_model.predict(tedf1.text.tolist())
 print(Counter(preds_task1))
 
 # %%
+# Evaluate predictions
+true_positive = ((preds_task1 == 1) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 1).sum()
+false_positive = ((preds_task1 == 1) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 1).sum()
+true_negative = ((preds_task1 == 0) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 0).sum()
+false_negative = ((preds_task1 == 0) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 0).sum()
+precision = true_positive / (true_positive + false_positive)
+recall = true_positive / (true_positive + true_negative)
+accuracy = (tedf1.label == preds_task1).mean()
+f1_score = 2 * precision * recall / (precision + recall)
+print("Proportion of correctly predicted labels:", accuracy)
+print("F1-score:", f1_score)
+
+# %%
 labels2file([[k] for k in preds_task1], 'task1.txt')
 
 # %%
