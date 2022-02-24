@@ -28,3 +28,7 @@ class Back2BackTranslator:
 
     def translate_to(self, language: Language, text_en):
         return self._translators_to[language](text_en)[0]['generated_text']
+
+    def translate_back2back(self, language: Language, text_en):
+        text_in_language = self.translate_to(language, text_en)
+        return self.translate_from(language, text_in_language)
