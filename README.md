@@ -8,4 +8,15 @@ For DoC GPU, ensure you install anaconda in `/vol/bitbucket/<your_username>`
 
 2. Generate the new environment:
 
-`conda create -n nlp python=3.8`
+```bash
+conda create -n nlp python=3.8
+conda activate nlp
+conda install cudatoolkit=11.0
+conda install pandas tqdm
+```
+
+3. Install rest of dependencies with pip
+```bash
+pip install simpletransformers
+pip install tensorboardx
+```
