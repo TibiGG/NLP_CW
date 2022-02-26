@@ -7,6 +7,8 @@ import torch
 from collections import Counter
 import os
 
+from back2back import Back2BackTranslator, Language
+
 # %%
 # prepare logger
 logging.basicConfig(level=logging.INFO)
@@ -105,13 +107,28 @@ tedf1 = pd.DataFrame(rows)
 # RoBERTa Baseline for Task 1
 
 # %%
+# Initialise translator with back2back capabilities
+b2b = Back2BackTranslator()
+
+# %%
 # TODO: replace current logic with data augmentation
 # downsample negative instances
 pcldf = trdf1[trdf1.label == 1]
 nopcldf = trdf1[trdf1.label == 0]
+
+pcldf_dup = pcldf.copy()
+pcldf_dup['text'] = \
+    pcldf_dup['text'].apply(
+        lambda txt: b2b.translate_back2back(Language.PT, txt))
+pcldf = pd.concat([pcldf, pcldf_dup], ignore_index=True)
 npos = len(pcldf)
 
 training_set1 = pd.concat([pcldf, nopcldf[:npos * 2]])
+
+# %% md
+print("Something")
+# %% md
+import pickle
 
 # %% md
 # Training Code
@@ -138,10 +155,14 @@ print(Counter(preds_task1))
 
 # %%
 # Evaluate predictions
-true_positive = ((preds_task1 == 1) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 1).sum()
-false_positive = ((preds_task1 == 1) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 1).sum()
-true_negative = ((preds_task1 == 0) & (tedf1.label == preds_task1)).sum() / (preds_task1 == 0).sum()
-false_negative = ((preds_task1 == 0) & (tedf1.label != preds_task1)).sum() / (preds_task1 == 0).sum()
+true_positive = ((preds_task1 == 1) & (tedf1.label == preds_task1)).sum() / (
+        preds_task1 == 1).sum()
+false_positive = ((preds_task1 == 1) & (tedf1.label != preds_task1)).sum() / (
+        preds_task1 == 1).sum()
+true_negative = ((preds_task1 == 0) & (tedf1.label == preds_task1)).sum() / (
+        preds_task1 == 0).sum()
+false_negative = ((preds_task1 == 0) & (tedf1.label != preds_task1)).sum() / (
+        preds_task1 == 0).sum()
 precision = true_positive / (true_positive + false_positive)
 recall = true_positive / (true_positive + true_negative)
 accuracy = (tedf1.label == preds_task1).mean()
