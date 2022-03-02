@@ -11,7 +11,7 @@ from pathlib import Path
 from tqdm.notebook import tqdm
 tqdm.pandas()
 
-from back2back import Back2BackTranslator, Language
+from back2back import Back2BackTranslator
 
 # %%
 # prepare logger
@@ -90,7 +90,7 @@ test_data_df = pd.DataFrame(rows)
 
 # %%
 # Initialise translator with back2back capabilities
-b2b = Back2BackTranslator(device)
+b2b = Back2BackTranslator()
 
 # %%
 # TODO: replace current logic with data augmentation
@@ -101,7 +101,7 @@ train_nopcl_df = train_data_df[train_data_df.label == 0]
 train_pcl_df_dup = train_pcl_df.copy()
 train_pcl_df_dup['text'] = \
     train_pcl_df_dup['text'].progress_apply(
-        lambda txt: b2b.translate_back2back(Language.PT, txt))
+        lambda txt: b2b.translate_back2back('pt', txt))
 
 train_pcl_df = pd.concat([train_pcl_df, train_pcl_df_dup], ignore_index=True)
 npos = len(train_pcl_df)
