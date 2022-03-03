@@ -69,7 +69,6 @@ def rebuild_set(ids):
             dpm.train_task1_df.loc[
                 dpm.train_task1_df.par_id == parid].label.values[0]
         rows.append({
-            'par_id': parid,
             'text': text,
             'label': label
         })
@@ -98,15 +97,7 @@ b2b = Back2BackTranslator()
 train_pcl_df = train_data_df[train_data_df.label == 1]
 train_nopcl_df = train_data_df[train_data_df.label == 0]
 
-train_pcl_df_dup = train_pcl_df.copy()
-train_pcl_df_dup['text'] = \
-    train_pcl_df_dup['text'].progress_apply(
-        lambda txt: b2b.translate_back2back('pt', txt))
-
-train_pcl_df = pd.concat([train_pcl_df, train_pcl_df_dup], ignore_index=True)
-npos = len(train_pcl_df)
-
-training_set1 = pd.concat([train_pcl_df, train_nopcl_df[:npos * 2]])
+training_set1 = pd.concat([train_pcl_df, train_nopcl_df])
 
 # %%
 # Training Code

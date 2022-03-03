@@ -70,3 +70,9 @@ class TestBack2BackTranslator(TestCase):
                 # Make sure b2b translation differs
                 self.assertNotEquals(text, text2)
         
+    def test_translate_and_sanitise(self):
+        en_text = """ As Briggs &amp; Stratton celebrates its 110th anniversary year , what better way to reaffirm our commitment to the Milwaukee community than by providing $1 million to kids in need of pediatric care , "" said Rick Carpenter , vice president corporate marketing . "" We are lucky to have one of the nation 's top pediatric hospitals right here within our community and Briggs &amp; Stratton firmly stands behind its commitment to extend its support into the future . """
+        en_text_2 = self.b2b.translate_back2back('pt', en_text)
+        print(en_text_2)
+        # Make sure b2b translation differs
+        self.assertGreater(len(en_text_2), 20)
