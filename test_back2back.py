@@ -8,6 +8,17 @@ class TestBack2BackTranslator(TestCase):
         # Ensure any error has its full error message printed
         self.maxDiff = None
         self.b2b = Back2BackTranslator()
+        self.other_langs = [
+            'pt',
+            'fr',
+            'de',
+            'sw',
+            'sp',
+            'th',
+            'it',
+            'bg',
+            'ko',
+             ]
 
     def test_translate_from(self):
         pt_text = "Meu nome é Sarah e eu vivo em Londres."
@@ -33,3 +44,29 @@ class TestBack2BackTranslator(TestCase):
         print(en_text_2)
         # Make sure b2b translation differs
         self.assertNotEquals(en_text, en_text_2)
+
+    def test_translate_to_many_languages(self):
+        en_text = "We 're living in times of absolute insanity , as I 'm pretty sure most people are aware . For a while , waking up every day to check the news seemed to carry with it the same feeling of panic and dread that action heroes probably face when they 're trying to decide whether to cut the blue or green wire on a ticking bomb -- except the bomb 's instructions long ago burned in a fire and imminent catastrophe seems the likeliest outcome . It 's hard to stay that on-edge for that long , though , so it 's natural for people to become inured to this constant chaos , to slump into a malaise of hopelessness and pessimism "
+        en_text_from = dict()
+        for lang in self.other_langs:
+            print(lang)
+            en_text_from[lang] = self.b2b.translate_to(lang, en_text)
+
+    def test_translate_btb_many_languages(self):
+        en_text = "We 're living in times of absolute insanity , as I 'm pretty sure most people are aware . For a while , waking up every day to check the news seemed to carry with it the same feeling of panic and dread that action heroes probably face when they 're trying to decide whether to cut the blue or green wire on a ticking bomb -- except the bomb 's instructions long ago burned in a fire and imminent catastrophe seems the likeliest outcome . It 's hard to stay that on-edge for that long , though , so it 's natural for people to become inured to this constant chaos , to slump into a malaise of hopelessness and pessimism "
+        en_text_from = dict()
+        for lang in self.other_langs:
+            en_text_from[lang] = self.b2b.translate_back2back(lang, en_text)
+
+        for lang, text in en_text_from.items():
+            # Make sure b2b translation differs
+            self.assertNotEquals(en_text, text)
+            other_texts = en_text_from.copy()
+            other_texts.pop(lang)
+            for lang2, text2 in other_texts.items():
+                print(f"{lang}, {lang2}")
+                print(text)
+                print(text2)
+                # Make sure b2b translation differs
+                self.assertNotEquals(text, text2)
+        
