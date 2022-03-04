@@ -1,8 +1,10 @@
 # %%
 # Import dependencies
+from pyexpat import features
 from multitask import MultiTaskModel
 from back2back import Back2BackTranslator
 from dont_patronize_me import DontPatronizeMe
+from data_collator import MultitaskTrainer, PCLDataCollator
 
 import transformers
 from transformers import \
@@ -10,6 +12,7 @@ from transformers import \
     AutoConfig, \
     DataCollatorWithPadding, \
     AutoModelForSequenceClassification, \
+    AutoModelForMultipleChoice, \
     TrainingArguments, \
     Trainer
 from datasets import load_dataset
@@ -63,53 +66,79 @@ pcl_dataset = load_dataset('csv', data_files={'train': str(
     data_path/'dpm_pcl_train.csv'), 'test': str(data_path/'dpm_pcl_test.csv')})
 pcl_emotion_dataset = load_dataset('csv', data_files=str(data_path/"dpm_pcl_emotion_train.csv"))
 
+dataset_dict = {
+    "pcl_binary": pcl_dataset,
+    "pcl_emotion": pcl_emotion_dataset,
+}
+
 # %%
 # Instantiate tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-
-def preprocess(example):
+def preprocess_pcl_binary(example):
     return tokenizer(example['text'], truncation=True)
 
+def preprocess_pcl_emotion(example):
+    inputs = example["text"]
+    features = tokenizer(inputs, truncation=True)
+    return features
+
+convert_func_dict = {
+    "pcl_binary": preprocess_pcl_binary,
+    "pcl_emotion": preprocess_pcl_emotion,
+}
 
 # %%
 # Tokenize dataset
-token_pcl_dataset = pcl_dataset.map(preprocess, batched=True)
-data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+columns_dict = {
+    "pcl_binary": ['input_ids', 'attention_mask', 'label'],
+    "pcl_emotion": ['input_ids', 'attention_mask', 'label'],
+}
+
+features_dict = {}
+for task_name, dataset in dataset_dict.items():
+    features_dict[task_name] = {}
+    for phase, phase_dataset in dataset.items():
+        features_dict[task_name][phase] = phase_dataset.map(
+            convert_func_dict[task_name],
+            batched=True,
+            load_from_cache_file=False,
+        )
 
 # %%
 # Instantiate the model
-model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=2)
-
-num_training_steps = epochs * len(token_pcl_dataset['train'])
-optimizer = transformers.AdamW(model.parameters(), lr=learning_rate)
-scheduler = transformers.get_scheduler(
-    "linear",
-    optimizer=optimizer,
-    num_warmup_steps=0,
-    num_training_steps=num_training_steps,
+multitask_model = MultiTaskModel.create(
+    model_name=model_name,
+    model_type_dict={
+        "pcl_binary": AutoModelForSequenceClassification,
+        "pcl_emotion": AutoModelForMultipleChoice
+    },
+    model_config_dict={
+        "pcl_binary": AutoConfig.from_pretrained(model_name, num_labels=2),
+        "pcl_emotion": AutoConfig.from_pretrained(model_name, num_labels=7),
+    }
 )
+
 
 # %%
 # Define training args and trainer
-training_args = TrainingArguments(
-    report_to=None,
-    output_dir='./results',
-    learning_rate=learning_rate,
-    per_device_train_batch_size=batch_size,
-    per_device_eval_batch_size=batch_size,
-    num_train_epochs=epochs,
-    weight_decay=weight_decay,
-    logging_steps=100,
-)
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=token_pcl_dataset['train'],
-    eval_dataset=token_pcl_dataset['test'],
-    tokenizer=tokenizer,
-    data_collator=data_collator,
-    # optimizers=(optimizer, scheduler),
+
+train_dataset = {
+    "pcl_binary": features_dict["pcl_binary"]["train"],
+    "pcl_emotion": features_dict["pcl_emotion"]
+}
+trainer = MultitaskTrainer(
+    model=multitask_model,
+    args=TrainingArguments(
+        output_dir="./multitask_results",
+        overwrite_output_dir=True,
+        learning_rate=learning_rate,
+        do_train=True,
+        num_train_epochs=1,
+        per_device_train_batch_size=8,
+    ),
+    data_collator=PCLDataCollator(),
+    train_dataset=train_dataset,
 )
 trainer.train()
 
@@ -131,6 +160,6 @@ def labels2file(p, outf_path):
             outf.write(','.join([str(k) for k in pi]) + '\n')
 
 labels2file([[k] for k in preds], "task1.txt")
-os.system("cat task1.txt | head -n 10")
+# os.system("cat task1.txt | head -n 10")
 os.system("zip submission.zip task1.txt")
 # %%
