@@ -1,17 +1,37 @@
 # %%
+# Import dependencies
+from multitask import MultiTaskModel
+from back2back import Back2BackTranslator
 from dont_patronize_me import DontPatronizeMe
-from simpletransformers.classification import ClassificationModel, \
-    ClassificationArgs
-import pandas as pd
-import logging
+
+import transformers
+from transformers import \
+    AutoTokenizer, \
+    AutoConfig, \
+    DataCollatorWithPadding, \
+    AutoModelForSequenceClassification, \
+    TrainingArguments, \
+    Trainer
+from datasets import load_dataset
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from sklearn.metrics import f1_score
+
+import numpy as np
+import pandas as pd
+
+import logging
 from collections import Counter
 import os
+os.environ["WANDB_DISABLED"] = "true"
+
 from pathlib import Path
+
 from tqdm.notebook import tqdm
 tqdm.pandas()
 
-from back2back import Back2BackTranslator
 
 # %%
 # prepare logger
@@ -29,119 +49,88 @@ print('Cuda available? ', cuda_available)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # %%
+# Declare constants
+model_name = "roberta-base"
 
-# helper function to save predictions to an output file
+epochs = 1
+batch_size = 8
+learning_rate = 2e-5
+weight_decay = 0.01
+
+# %%
+# Load dataset
+pcl_dataset = load_dataset('csv', data_files={'train': str(
+    data_path/'dpm_pcl_train.csv'), 'test': str(data_path/'dpm_pcl_test.csv')})
+pcl_emotion_dataset = load_dataset('csv', data_files=str(data_path/"dpm_pcl_emotion_train.csv"))
+
+# %%
+# Instantiate tokenizer
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+
+def preprocess(example):
+    return tokenizer(example['text'], truncation=True)
+
+
+# %%
+# Tokenize dataset
+token_pcl_dataset = pcl_dataset.map(preprocess, batched=True)
+data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+# %%
+# Instantiate the model
+model = AutoModelForSequenceClassification.from_pretrained("roberta-base", num_labels=2)
+
+num_training_steps = epochs * len(token_pcl_dataset['train'])
+optimizer = transformers.AdamW(model.parameters(), lr=learning_rate)
+scheduler = transformers.get_scheduler(
+    "linear",
+    optimizer=optimizer,
+    num_warmup_steps=0,
+    num_training_steps=num_training_steps,
+)
+
+# %%
+# Define training args and trainer
+training_args = TrainingArguments(
+    report_to=None,
+    output_dir='./results',
+    learning_rate=learning_rate,
+    per_device_train_batch_size=batch_size,
+    per_device_eval_batch_size=batch_size,
+    num_train_epochs=epochs,
+    weight_decay=weight_decay,
+    logging_steps=100,
+)
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=token_pcl_dataset['train'],
+    eval_dataset=token_pcl_dataset['test'],
+    tokenizer=tokenizer,
+    data_collator=data_collator,
+    # optimizers=(optimizer, scheduler),
+)
+trainer.train()
+
+# %%
+# Get predictions
+predictions = trainer.predict(token_pcl_dataset["test"])
+preds = np.argmax(predictions.predictions, axis=-1)
+
+# %%
+# Compute F1 score
+score = f1_score(preds, predictions.label_ids, average='binary')
+print(f"F1 score: {score}")
+
+# %%
+# Prepare predictions for submission
 def labels2file(p, outf_path):
     with open(outf_path, 'w') as outf:
         for pi in p:
             outf.write(','.join([str(k) for k in pi]) + '\n')
 
-
-# %%
-# Import Don't Patronize Me manager
-dpm = DontPatronizeMe(data_path, data_path)
-
-dpm.load_task1()
-dpm.load_task2(return_one_hot=True)
-
-# %%
-# Load paragraph IDs
-
-train_ids = pd.read_csv(data_path/'train_semeval_parids-labels.csv')
-test_ids = pd.read_csv(data_path/'dev_semeval_parids-labels.csv')
-
-train_ids.par_id = train_ids.par_id.astype(str)
-test_ids.par_id = test_ids.par_id.astype(str)
-
-# %%
-
-
-def rebuild_set(ids):
-    rows = []  # will contain par_id, label and text
-    for idx in range(len(ids)):
-        parid = ids.par_id[idx]
-        # print(parid)
-        # select row from original dataset to retrieve `text` and binary label
-        text = \
-            dpm.train_task1_df.loc[
-                dpm.train_task1_df.par_id == parid].text.values[0]
-        label = \
-            dpm.train_task1_df.loc[
-                dpm.train_task1_df.par_id == parid].label.values[0]
-        rows.append({
-            'text': text,
-            'label': label
-        })
-    return rows
-
-
-# %%
-# Rebuild training set (Task 1)
-rows = rebuild_set(train_ids)
-print(len(rows))
-train_data_df = pd.DataFrame(rows)
-
-# %%
-# Rebuild test set (Task 1)
-rows = rebuild_set(test_ids)
-print(len(rows))
-test_data_df = pd.DataFrame(rows)
-
-# %%
-# Initialise translator with back2back capabilities
-b2b = Back2BackTranslator()
-
-# %%
-# TODO: replace current logic with data augmentation
-# downsample negative instances
-train_pcl_df = train_data_df[train_data_df.label == 1]
-train_nopcl_df = train_data_df[train_data_df.label == 0]
-
-training_set1 = pd.concat([train_pcl_df, train_nopcl_df])
-
-# %%
-# Training Code
-
-task1_model_args = ClassificationArgs(num_train_epochs=1,
-                                      no_save=True,
-                                      no_cache=True,
-                                      overwrite_output_dir=True)
-print(task1_model_args)
-task1_model = ClassificationModel("distilbert",
-                                  "distilbert-base-uncased",
-                                  args=task1_model_args,
-                                  num_labels=2,
-                                  use_cuda=cuda_available)
-# %%
-# train model
-task1_model.train_model(training_set1[['text', 'label']])
-# run predictions
-preds_task1, _ = task1_model.predict(test_data_df.text.tolist())
-
-# %%
-print(Counter(preds_task1))
-
-# %%
-# Evaluate predictions
-true_positive = ((preds_task1 == 1) & (test_data_df.label == preds_task1)).sum() / (
-    preds_task1 == 1).sum()
-false_positive = ((preds_task1 == 1) & (test_data_df.label != preds_task1)).sum() / (
-    preds_task1 == 1).sum()
-true_negative = ((preds_task1 == 0) & (test_data_df.label == preds_task1)).sum() / (
-    preds_task1 == 0).sum()
-false_negative = ((preds_task1 == 0) & (test_data_df.label != preds_task1)).sum() / (
-    preds_task1 == 0).sum()
-precision = true_positive / (true_positive + false_positive)
-recall = true_positive / (true_positive + true_negative)
-accuracy = (test_data_df.label == preds_task1).mean()
-f1_score = 2 * precision * recall / (precision + recall)
-print("Proportion of correctly predicted labels:", accuracy)
-print("F1-score:", f1_score)
-
-# %%
-labels2file([[k] for k in preds_task1], 'task1.txt')
-
-# %%
-# Prepare submission
+labels2file([[k] for k in preds], "task1.txt")
 os.system("cat task1.txt | head -n 10")
 os.system("zip submission.zip task1.txt")
+# %%
