@@ -31,21 +31,52 @@ data_pcl['labels'] = data_pcl.label >= 2
 
 #%%
 # Seperate train and test df according to train_ids and test_ids
-train_df = data_pcl.loc[data_pcl.par_id.isin(train_ids.par_id)][['par_id','text', 'labels']]
+train_df = data_pcl.loc[data_pcl.par_id.isin(train_ids.par_id)][['par_id','keyword','text', 'labels']]
 test_df = data_pcl.loc[data_pcl.par_id.isin(test_ids.par_id)][['par_id','text', 'labels']]
 
 yes_pcl = train_df.loc[train_df.labels==True]
 no_pcl = train_df.loc[train_df.labels==False]
 
-# Augment yes_pcl data frame with backtranslated data
+#%%
+# Separate data frame into train and validation sets
+def separate_train_validation(pcl_df, percent_validation=0.10):
+    assert(0 <= percent_validation <= 1)
+    keywords = set(train_df.keyword.to_list())
+    pcl_validation_list = []
+    pcl_train_list = []
+    for keyword in keywords:
+        pcl_with_keyword = pcl_df.loc[pcl_df.keyword==keyword]
+        validation_set_len = int(np.floor(len(pcl_with_keyword) * percent_validation))
+        pcl_validation_list.append(pcl_with_keyword[:validation_set_len])
+        pcl_train_list.append(pcl_with_keyword[validation_set_len:])
+
+    pcl_validation_df = pd.concat(pcl_validation_list)
+    pcl_train_df = pd.concat(pcl_train_list)
+
+    return pcl_validation_df, pcl_train_df 
+
+yes_pcl_validation, yes_pcl_train = separate_train_validation(yes_pcl)
+no_pcl_validation, no_pcl_train = separate_train_validation(no_pcl)
 
 #%%
-yes_pcl_translations = pd.read_csv("./datasets/data_pcl_translations.csv")
-yes_pcl_translations['labels'] = True
-yes_pcl = pd.concat([yes_pcl, yes_pcl_translations])
-new_train = pd.concat([yes_pcl, no_pcl])[['text', 'labels']]
-print('nb yes', (new_train['labels'] > .5).sum())
-print('nb no', (new_train['labels'] < .5).sum())
+# Augment yes_pcl data frame with backtranslated data
+def augment_with_translations(yes_pcl_df, no_pcl_df):
+    yes_pcl_translations = pd.read_csv("./datasets/data_pcl_translations.csv")
+    yes_pcl_translations['labels'] = True
+    yes_pcl_translations = yes_pcl_translations.loc[yes_pcl_translations.par_id.isin(yes_pcl_df.par_id)]
+    yes_pcl_df = pd.concat([yes_pcl_df, yes_pcl_translations])
+    new_df = pd.concat([yes_pcl_df, no_pcl_df])[['text', 'labels']]
+    print('nb yes', (new_df['labels'] > .5).sum())
+    print('nb no', (new_df['labels'] < .5).sum())
+    return new_df
+
+#%%
+new_validation = augment_with_translations(yes_pcl_validation, no_pcl_validation)
+new_train = augment_with_translations(yes_pcl_train, no_pcl_train)
+print('nb yes validation', (new_validation['labels'] > .5).sum())
+print('nb no validation', (new_validation['labels'] < .5).sum())
+print('nb yes train', (new_train['labels'] > .5).sum())
+print('nb no train', (new_train['labels'] < .5).sum())
 
 #%%
 n_examples = len(new_train)
@@ -53,24 +84,27 @@ print('nb examples', n_examples)
 new_train = new_train.iloc[np.random.permutation(n_examples)]
 
 
-task1_model_args = ClassificationArgs(num_train_epochs=5,
+task1_model_args = ClassificationArgs(num_train_epochs=100,
                                         no_save=False,
                                         no_cache=False,
                                         overwrite_output_dir=True,
                                         evaluate_during_training=True, 
-                                        output_dir='./outputs/outputs_roberta_yes_copies', #by default
-                                        best_model_dir='./outputs/outputs_roberta_yes_copies/best_model',
-                                        max_seq_length=512, #by default 128, it could be intresting to see if this trucates our texts
+                                        output_dir='./outputs/outputs_distil_64_batch_1e-6_lr', #by default
+                                        best_model_dir='./outputs/outputs_distil_64_batch_1e-6_lr/best_model',
+                                        max_seq_length=128, #by default 128, it could be intresting to see if this trucates our texts
                                         save_eval_checkpoints=False,
                                         save_model_every_epoch=True,
                                         save_steps=-1,
                                         evaluate_during_training_verbose=False,
-                                        learning_rate=4e-5,
-                                        train_batch_size=8,
+                                        learning_rate=1e-6,
+                                        train_batch_size=64,
+                                        early_stopping_metric='f1',
+                                        early_stopping_metric_minimize=False,
+                                        early_stopping_patience=100,
                                         )
 
 
-task1_model = ClassificationModel("roberta", "roberta-base",
+task1_model = ClassificationModel("roberta", "distilroberta-base",
                                     args=task1_model_args,
                                     use_cuda=torch.cuda.is_available()
                                     )
@@ -80,6 +114,6 @@ task1_model = ClassificationModel("roberta", "roberta-base",
 #mini_train_df = train_df.loc[[0,1,2,3,4,10423,10444,10453,10466,10468]]
 #mini_test_df = test_df.loc[[150,153,10462,10463]]
 
-# Run the modelb
-task1_model.train_model(new_train, show_running_loss=True, eval_df=test_df, f1=f1_score)
+# Run the model
+task1_model.train_model(new_train, show_running_loss=True, eval_df=new_validation, f1=f1_score)
     
