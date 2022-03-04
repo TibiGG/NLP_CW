@@ -1,8 +1,5 @@
-from dont_patronize_me import DontPatronizeMe
-import pandas as pd
 import sys
-from simpletransformers.classification import ClassificationModel, ClassificationArgs
-from pathlib import Path
+from simpletransformers.classification import ClassificationModel
 
 # helper function to save predictions to an output file
 def labels2file(p, outf_path):

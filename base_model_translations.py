@@ -12,7 +12,7 @@ tqdm.pandas()
 #%%
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device=", device)
-if device == "cuda":
+if device != "cpu":
     print("Emptying Cache")
     torch.cuda.empty_cache()
 
@@ -83,28 +83,29 @@ n_examples = len(new_train)
 print('nb examples', n_examples)
 new_train = new_train.iloc[np.random.permutation(n_examples)]
 
+batch_size = 64
 
-task1_model_args = ClassificationArgs(num_train_epochs=100,
+task1_model_args = ClassificationArgs(num_train_epochs=1000,
                                         no_save=False,
                                         no_cache=False,
                                         overwrite_output_dir=True,
                                         evaluate_during_training=True, 
-                                        output_dir='./outputs/outputs_distil_64_batch_1e-6_lr', #by default
-                                        best_model_dir='./outputs/outputs_distil_64_batch_1e-6_lr/best_model',
+                                        output_dir=f'./outputs/roberta_bs_{batch_size}', #by default
+                                        best_model_dir=f'./outputs/roberta_bs_{batch_size}/best_model',
                                         max_seq_length=128, #by default 128, it could be intresting to see if this trucates our texts
                                         save_eval_checkpoints=False,
                                         save_model_every_epoch=True,
                                         save_steps=-1,
                                         evaluate_during_training_verbose=False,
-                                        learning_rate=1e-6,
-                                        train_batch_size=64,
+                                        learning_rate=4e-5,
+                                        train_batch_size=batch_size,
                                         early_stopping_metric='f1',
                                         early_stopping_metric_minimize=False,
                                         early_stopping_patience=100,
                                         )
 
 
-task1_model = ClassificationModel("roberta", "distilroberta-base",
+task1_model = ClassificationModel("roberta", "roberta-base",
                                     args=task1_model_args,
                                     use_cuda=torch.cuda.is_available()
                                     )
