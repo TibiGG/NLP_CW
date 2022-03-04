@@ -1,5 +1,12 @@
 # NLP_CW
 
+## File to run:
+As mentioned in the coursework specification, the entire project should be runnable from one file.
+Please, then, run the following file as a JuPyter notebook:
+```
+submission_file.ipynb
+```
+
 ## Generate Virtual Environment
 
 This task is useful both for running the main script on either your computer or

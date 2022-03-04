@@ -26,16 +26,16 @@ data_pcl = pd.read_csv("./datasets/dontpatronizeme_pcl.tsv", sep="\t", skiprows=
 
 #%%
 # Binary labels
-data_pcl['labels'] = data_pcl.label >= 2
+data_pcl['is_pcl'] = data_pcl.label >= 2
 
 
 #%%
 # Seperate train and test df according to train_ids and test_ids
-train_df = data_pcl.loc[data_pcl.par_id.isin(train_ids.par_id)][['par_id','keyword','text', 'labels']]
-test_df = data_pcl.loc[data_pcl.par_id.isin(test_ids.par_id)][['par_id','text', 'labels']]
+train_df = data_pcl.loc[data_pcl.par_id.isin(train_ids.par_id)][['par_id','keyword','text', 'is_pcl']]
+test_df = data_pcl.loc[data_pcl.par_id.isin(test_ids.par_id)][['par_id','text', 'is_pcl']]
 
-yes_pcl = train_df.loc[train_df.labels==True]
-no_pcl = train_df.loc[train_df.labels==False]
+yes_pcl = train_df.loc[train_df.is_pcl==True]
+no_pcl = train_df.loc[train_df.is_pcl==False]
 
 #%%
 # Separate data frame into train and validation sets
@@ -62,50 +62,51 @@ no_pcl_validation, no_pcl_train = separate_train_validation(no_pcl)
 # Augment yes_pcl data frame with backtranslated data
 def augment_with_translations(yes_pcl_df, no_pcl_df):
     yes_pcl_translations = pd.read_csv("./datasets/data_pcl_translations.csv")
-    yes_pcl_translations['labels'] = True
+    yes_pcl_translations['is_pcl'] = True
     yes_pcl_translations = yes_pcl_translations.loc[yes_pcl_translations.par_id.isin(yes_pcl_df.par_id)]
     yes_pcl_df = pd.concat([yes_pcl_df, yes_pcl_translations])
-    new_df = pd.concat([yes_pcl_df, no_pcl_df])[['text', 'labels']]
-    print('nb yes', (new_df['labels'] > .5).sum())
-    print('nb no', (new_df['labels'] < .5).sum())
+    new_df = pd.concat([yes_pcl_df, no_pcl_df])[['text', 'is_pcl']]
+    print('nb yes', (new_df['is_pcl'] > .5).sum())
+    print('nb no', (new_df['is_pcl'] < .5).sum())
     return new_df
 
 #%%
 new_validation = augment_with_translations(yes_pcl_validation, no_pcl_validation)
 new_train = augment_with_translations(yes_pcl_train, no_pcl_train)
-print('nb yes validation', (new_validation['labels'] > .5).sum())
-print('nb no validation', (new_validation['labels'] < .5).sum())
-print('nb yes train', (new_train['labels'] > .5).sum())
-print('nb no train', (new_train['labels'] < .5).sum())
+print('nb yes validation', (new_validation['is_pcl'] > .5).sum())
+print('nb no validation', (new_validation['is_pcl'] < .5).sum())
+print('nb yes train', (new_train['is_pcl'] > .5).sum())
+print('nb no train', (new_train['is_pcl'] < .5).sum())
 
 #%%
 n_examples = len(new_train)
 print('nb examples', n_examples)
 new_train = new_train.iloc[np.random.permutation(n_examples)]
 
-batch_size = 64
+batch_size = 16
+seq_length = 128
 
 task1_model_args = ClassificationArgs(num_train_epochs=1000,
-                                        no_save=False,
-                                        no_cache=False,
-                                        overwrite_output_dir=True,
-                                        evaluate_during_training=True, 
-                                        output_dir=f'./outputs/roberta_bs_{batch_size}', #by default
-                                        best_model_dir=f'./outputs/roberta_bs_{batch_size}/best_model',
-                                        max_seq_length=128, #by default 128, it could be intresting to see if this trucates our texts
-                                        save_eval_checkpoints=False,
-                                        save_model_every_epoch=True,
-                                        save_steps=-1,
-                                        evaluate_during_training_verbose=False,
-                                        learning_rate=4e-5,
-                                        train_batch_size=batch_size,
-                                        early_stopping_metric='f1',
-                                        early_stopping_metric_minimize=False,
-                                        early_stopping_patience=100,
-                                        )
+                                      no_save=False,
+                                      no_cache=False,
+                                      overwrite_output_dir=True,
+                                      evaluate_during_training=True,
+                                      output_dir=f'./outputs/roberta_large_bs_{batch_size}_seq_{seq_length}', #by default
+                                      best_model_dir=f'./outputs/roberta_large_bs_{batch_size}_seq_{seq_length}/best_model',
+                                      max_seq_length=seq_length, #by default 128, it could be intresting to see if this trucates our texts
+                                      save_eval_checkpoints=False,
+                                      save_model_every_epoch=True,
+                                      save_steps=-1,
+                                      evaluate_during_training_verbose=False,
+                                      learning_rate=4e-5,
+                                      train_batch_size=batch_size,
+                                      early_stopping_metric='f1',
+                                      early_stopping_metric_minimize=False,
+                                      early_stopping_patience=100,
+                                      )
 
 
-task1_model = ClassificationModel("roberta", "roberta-base",
+task1_model = ClassificationModel("roberta", "roberta-large",
                                     args=task1_model_args,
                                     use_cuda=torch.cuda.is_available()
                                     )
